@@ -36,6 +36,10 @@ module_param_named(simlock_code, simlock_code, charp, S_IRUGO | S_IWUSR | S_IWGR
 #define SCM_ERROR		-1
 #define SCM_INTERRUPTED		1
 
+#define GCC_VERSION (__GNUC__ * 10000 \
+                               + __GNUC_MINOR__ * 100 \
+                               + __GNUC_PATCHLEVEL__)
+
 static DEFINE_MUTEX(scm_lock);
 
 /**
@@ -200,6 +204,12 @@ static u32 smc(u32 cmd_addr)
 			__asmeq("%1", "r0")
 			__asmeq("%2", "r1")
 			__asmeq("%3", "r2")
+<<<<<<< HEAD
+=======
+#if GCC_VERSION > 40400
+			".arch_extension sec\n"
+#endif
+>>>>>>> 28c3f3b... scm: only use '.arch_extension sec' if the compiler is newer than gcc4.4
 			"smc	#0	@ switch to secure world\n"
 			: "=r" (r0)
 			: "r" (r0), "r" (r1), "r" (r2)
@@ -321,6 +331,12 @@ s32 scm_call_atomic1(u32 svc, u32 cmd, u32 arg1)
 		__asmeq("%1", "r0")
 		__asmeq("%2", "r1")
 		__asmeq("%3", "r2")
+<<<<<<< HEAD
+=======
+#if GCC_VERSION > 40400
+		".arch_extension sec\n"
+#endif
+>>>>>>> 28c3f3b... scm: only use '.arch_extension sec' if the compiler is newer than gcc4.4
 		"smc	#0	@ switch to secure world\n"
 		: "=r" (r0)
 		: "r" (r0), "r" (r1), "r" (r2)
@@ -353,6 +369,12 @@ s32 scm_call_atomic2(u32 svc, u32 cmd, u32 arg1, u32 arg2)
 		__asmeq("%2", "r1")
 		__asmeq("%3", "r2")
 		__asmeq("%4", "r3")
+<<<<<<< HEAD
+=======
+#if GCC_VERSION > 40400
+		".arch_extension sec\n"
+#endif
+>>>>>>> 28c3f3b... scm: only use '.arch_extension sec' if the compiler is newer than gcc4.4
 		"smc	#0	@ switch to secure world\n"
 		: "=r" (r0)
 		: "r" (r0), "r" (r1), "r" (r2), "r" (r3));
@@ -380,6 +402,12 @@ u32 scm_get_version(void)
 			__asmeq("%1", "r1")
 			__asmeq("%2", "r0")
 			__asmeq("%3", "r1")
+<<<<<<< HEAD
+=======
+#if GCC_VERSION > 40400
+			".arch_extension sec\n"
+#endif
+>>>>>>> 28c3f3b... scm: only use '.arch_extension sec' if the compiler is newer than gcc4.4
 			"smc	#0	@ switch to secure world\n"
 			: "=r" (r0), "=r" (r1)
 			: "r" (r0), "r" (r1)
