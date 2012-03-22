@@ -2478,7 +2478,7 @@ CONFIG_NETWORK_FILESYSTEMS=y
 # CONFIG_NFS_FS is not set
 # CONFIG_NFSD is not set
 # CONFIG_CEPH_FS is not set
-CONFIG_CIFS=m
+CONFIG_CIFS=y
 # CONFIG_NCP_FS is not set
 # CONFIG_CODA_FS is not set
 # CONFIG_AFS_FS is not set
@@ -2527,7 +2527,7 @@ CONFIG_NLS_ISO8859_1=y
 # CONFIG_NLS_ISO8859_15 is not set
 # CONFIG_NLS_KOI8_R is not set
 # CONFIG_NLS_KOI8_U is not set
-CONFIG_NLS_UTF8=m
+CONFIG_NLS_UTF8=y
 
 #
 # Kernel hacking
