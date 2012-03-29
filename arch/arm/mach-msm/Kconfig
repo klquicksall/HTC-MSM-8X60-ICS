@@ -1494,6 +1494,14 @@ config MSM_DALRPC_TEST
 	help
 	  Exercises DAL RPC calls to QDSP6.
 
+config GPU_OVERCLOCK
+	bool "Enable GPU Overclocking option"
+	default n
+
+config CPU_VOLTAGE_TABLE
+	bool "Enable CPU Voltage Table via sysfs for adjustements"
+	default n
+
 if CPU_FREQ_MSM
 
 config MSM_CPU_FREQ_SET_MIN_MAX
@@ -2068,6 +2076,9 @@ config MSM_SLEEP_STATS
 	depends on CPU_IDLE
 	default n
 
+config MSM_SLEEP_STATS_DEVICE
+	bool "Enable exporting of MSM sleep device stats to userspace"
+
 config MSM_STANDALONE_POWER_COLLAPSE
        bool "Enable standalone power collapse"
        default n
@@ -2235,3 +2246,4 @@ config REMOVE_EBI1_FIXED_CLK
 		use for 2x Radio
 
 endif
+
