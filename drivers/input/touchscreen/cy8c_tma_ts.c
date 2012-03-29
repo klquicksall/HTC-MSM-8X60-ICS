@@ -805,9 +805,8 @@ static irqreturn_t cy8c_ts_irq_thread(int irq, void *ptr)
 
 		if (ts->ambiguous_state == ts->finger_count
 			|| ts->ambiguous_state == report) {
-			if (ts->flag_htc_event == 0) {
+			if (ts->flag_htc_event == 0)
 				input_mt_sync(ts->input_dev);
-			}
 			else {
 				input_report_abs(ts->input_dev, ABS_MT_AMPLITUDE, 0);
 				input_report_abs(ts->input_dev, ABS_MT_POSITION, 1 << 31);
@@ -820,6 +819,7 @@ static irqreturn_t cy8c_ts_irq_thread(int irq, void *ptr)
 				if (ts->flag_htc_event == 0) {
 					input_mt_sync(ts->input_dev);
 					input_sync(ts->input_dev);
+					ts->sameFilter[2] = ts->sameFilter[0] = ts->sameFilter[1] = -1;
 				} else {
 					input_report_abs(ts->input_dev, ABS_MT_AMPLITUDE, 0);
 					input_report_abs(ts->input_dev, ABS_MT_POSITION, 1 << 31);
@@ -828,17 +828,25 @@ static irqreturn_t cy8c_ts_irq_thread(int irq, void *ptr)
 				for (loop_i = 0; loop_i < report; loop_i++) {
 					if (!(ts->grip_suppression & BIT(loop_i))) {
 						if (ts->flag_htc_event == 0) {
-							input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR,
-								finger_data[loop_i][2]);
-							input_report_abs(ts->input_dev, ABS_MT_WIDTH_MAJOR,
-								finger_data[loop_i][2]);
-							input_report_abs(ts->input_dev, ABS_MT_PRESSURE,
-								finger_data[loop_i][2]);
-							input_report_abs(ts->input_dev, ABS_MT_POSITION_X,
-								finger_data[loop_i][0]);
-							input_report_abs(ts->input_dev, ABS_MT_POSITION_Y,
-								finger_data[loop_i][1]);
-							input_mt_sync(ts->input_dev);
+							if (!(finger_data[loop_i][2] == ts->sameFilter[2] &&
+								finger_data[loop_i][0] == ts->sameFilter[0] &&
+								finger_data[loop_i][1] == ts->sameFilter[1] &&
+								(buf[2] & 0x0F) == 1)) {
+								input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR,
+									finger_data[loop_i][2]);
+								input_report_abs(ts->input_dev, ABS_MT_WIDTH_MAJOR,
+									finger_data[loop_i][2]);
+								input_report_abs(ts->input_dev, ABS_MT_PRESSURE,
+									finger_data[loop_i][2]);
+								input_report_abs(ts->input_dev, ABS_MT_POSITION_X,
+									finger_data[loop_i][0]);
+								input_report_abs(ts->input_dev, ABS_MT_POSITION_Y,
+									finger_data[loop_i][1]);
+								input_mt_sync(ts->input_dev);
+								ts->sameFilter[2] = finger_data[loop_i][2];
+								ts->sameFilter[0] = finger_data[loop_i][0];
+								ts->sameFilter[1] = finger_data[loop_i][1];
+							}
 						} else {
 							input_report_abs(ts->input_dev, ABS_MT_AMPLITUDE,
 								finger_data[loop_i][2] << 16 | finger_data[loop_i][2]);
@@ -862,17 +870,25 @@ static irqreturn_t cy8c_ts_irq_thread(int irq, void *ptr)
 		for (loop_i = 0; loop_i < ts->finger_count; loop_i++) {
 			if (!(ts->grip_suppression & BIT(loop_i))) {
 				if (ts->flag_htc_event == 0) {
-					input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR,
-						finger_data[loop_i][2]);
-					input_report_abs(ts->input_dev, ABS_MT_WIDTH_MAJOR,
-						finger_data[loop_i][2]);
-					input_report_abs(ts->input_dev, ABS_MT_PRESSURE,
-						finger_data[loop_i][2]);
-					input_report_abs(ts->input_dev, ABS_MT_POSITION_X,
-						finger_data[loop_i][0]);
-					input_report_abs(ts->input_dev, ABS_MT_POSITION_Y,
-						finger_data[loop_i][1]);
-					input_mt_sync(ts->input_dev);
+					if (!(finger_data[loop_i][2] == ts->sameFilter[2] &&
+								finger_data[loop_i][0] == ts->sameFilter[0] &&
+								finger_data[loop_i][1] == ts->sameFilter[1] &&
+								(buf[2] & 0x0F) == 1)) {
+						input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR,
+							finger_data[loop_i][2]);
+						input_report_abs(ts->input_dev, ABS_MT_WIDTH_MAJOR,
+							finger_data[loop_i][2]);
+						input_report_abs(ts->input_dev, ABS_MT_PRESSURE,
+							finger_data[loop_i][2]);
+						input_report_abs(ts->input_dev, ABS_MT_POSITION_X,
+							finger_data[loop_i][0]);
+						input_report_abs(ts->input_dev, ABS_MT_POSITION_Y,
+							finger_data[loop_i][1]);
+						input_mt_sync(ts->input_dev);
+						ts->sameFilter[2] = finger_data[loop_i][2];
+						ts->sameFilter[0] = finger_data[loop_i][0];
+						ts->sameFilter[1] = finger_data[loop_i][1];
+					}
 				} else {
 					input_report_abs(ts->input_dev, ABS_MT_AMPLITUDE,
 						finger_data[loop_i][2] << 16 | finger_data[loop_i][2]);
@@ -896,6 +912,11 @@ static irqreturn_t cy8c_ts_irq_thread(int irq, void *ptr)
 				}
 			}
 		}
+		if ((ts->unlock_page) &&
+			((ts->p_finger_count > ts->finger_count) ||
+			(ts->finger_count == 4))) {
+			cy8c_reset_baseline();
+		}
 	} else {
 		ts->finger_count = 0;
 		ts->p_finger_count = 0;
@@ -904,6 +925,7 @@ static irqreturn_t cy8c_ts_irq_thread(int irq, void *ptr)
 		cy8c_data_toggle(ts);
 		if (ts->flag_htc_event == 0) {
 			input_mt_sync(ts->input_dev);
+			ts->sameFilter[2] = ts->sameFilter[0] = ts->sameFilter[1] = -1;
 		} else {
 			input_report_abs(ts->input_dev, ABS_MT_AMPLITUDE, 0);
 			input_report_abs(ts->input_dev, ABS_MT_POSITION, 1 << 31);
@@ -1021,6 +1043,7 @@ static int cy8c_ts_probe(struct i2c_client *client,
 		goto err_input_dev_alloc_failed;
 	}
 	ts->input_dev->name = "cy8c-touchscreen";
+	ts->input_dev->id.version = ts->version;
 	ts->input_dev->mtsize = 4;/* Initialize buffer with maximum 4 fingers at the same time */
 
 	set_bit(EV_SYN, ts->input_dev->evbit);
@@ -1234,4 +1257,5 @@ module_exit(cy8c_ts_exit);
 
 MODULE_DESCRIPTION("Cypress TMA Touchscreen Driver");
 MODULE_LICENSE("GPL");
+
 
