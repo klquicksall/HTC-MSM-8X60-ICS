@@ -848,7 +848,11 @@ enum {
 #define NUM_ACTIVE_LOAD_ARRAY	(ACTIVE_DURATION_MSEC/SAMPLE_DURATION_MSEC)
 #define NUM_INACTIVE_LOAD_ARRAY	(INACTIVE_DURATION_MSEC/SAMPLE_DURATION_MSEC)
 
+
 static bool lmf_browser_state = false;
+bool lmf_browser_state = false;
+bool lmf_screen_state = true;
+
 
 static unsigned long lmf_active_load_limit = MAX_ACTIVE_FREQ_LIMIT;
 static unsigned long lmf_inactive_load_limit = MAX_INACTIVE_FREQ_LIMIT;
@@ -913,7 +917,7 @@ static void do_dbs_timer(struct work_struct *work)
 
 #ifdef CONFIG_SEC_LIMIT_MAX_FREQ
 
-	if (!lmf_browser_state)
+	if (!lmf_browser_state && lmf_screen_state)
 	{
 		if (cpu == BOOT_CPU)
 		{
@@ -921,6 +925,13 @@ static void do_dbs_timer(struct work_struct *work)
 			{
 				pr_info("LMF: disabled\n");
 				lmf_old_state = false;
+
+				if (lmf_screen_state == true) {
+					/* wake up the 2nd core */
+					if (num_online_cpus() < 2)
+						cpu_up(1);
+				}
+
 			}
 
 			if (!active_state)
@@ -946,7 +957,7 @@ static void do_dbs_timer(struct work_struct *work)
 			active_state = true;
 		}
 	}
-	else // lmf_browser_state -> TRUE
+	else if (lmf_browser_state && lmf_screen_state) // lmf_browser_state -> TRUE
 	{
 		struct cpufreq_policy *policy;
 		unsigned long load_state_cpu = 0;
@@ -1035,6 +1046,12 @@ static void do_dbs_timer(struct work_struct *work)
 								load_limit_index = 0;
 								active_state = false;
 
+								if (lmf_screen_state == true) {
+									/* wake up the 2nd core */
+									if (num_online_cpus() < 2)
+										cpu_up(1);
+								}
+
 								/* set freq to 1.0GHz */
 								pr_info("LMF: CPU0 set max freq to 1.0GHz\n");
 								cpufreq_set_limits(BOOT_CPU, SET_MAX, INACTIVE_MAX_FREQ);
@@ -1048,6 +1065,12 @@ static void do_dbs_timer(struct work_struct *work)
 							else
 							{
 								msecs_limit_total = ACTIVE_DURATION_MSEC; // to prevent overflow
+								if (lmf_screen_state == true) {
+									/* take 2nd core offline */
+									if (num_online_cpus() > 1)
+										cpu_down(1);
+								}
+
 							}
 						}
 					}
@@ -1084,6 +1107,7 @@ static void do_dbs_timer(struct work_struct *work)
 									cpufreq_set_limits(NON_BOOT_CPU, SET_MAX, ACTIVE_MAX_FREQ);
 								else
 									cpufreq_set_limits_off(NON_BOOT_CPU, SET_MAX, ACTIVE_MAX_FREQ);
+
 							}
 							else
 							{
