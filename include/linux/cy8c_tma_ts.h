@@ -17,6 +17,9 @@
 #define CY8C_I2C_H
 
 #include <linux/types.h>
+#ifdef CONFIG_TOUCHSCREEN_CYPRESS_SWEEP2WAKE
+#include <linux/input.h>
+#endif
 
 #define CYPRESS_TMA_NAME "CY8CTMA340"
 
@@ -42,5 +45,11 @@ struct cy8c_i2c_platform_data {
 	uint16_t filter_level[4];
 };
 
+#ifdef CONFIG_TOUCHSCREEN_CYPRESS_SWEEP2WAKE
+/* Sweep2Wake */
+extern void sweep2wake_setdev(struct input_dev * input_device);
 #endif
+
+#endif
+
 
