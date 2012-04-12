@@ -161,31 +161,38 @@ static void pm8xxx_vib_enable(struct timed_output_dev *dev, int value)
 					 timed_dev);
 	unsigned long flags;
 
-/*	spin_lock_irqsave(&vib->lock, flags);	*/
+	/* Sense 4 haptic feedback fix */
+	if ((value == 20) || (value == 21))
+		value = 40;
 
-retry:
-	spin_lock_irqsave(&vib->lock, flags);
+	if (strcmp(current->parent->comm, "init") != 0) {
 
-	if (hrtimer_try_to_cancel(&vib->vib_timer) < 0) {
+		/* spin_lock_irqsave(&vib->lock, flags); */
+
+	retry:
+		spin_lock_irqsave(&vib->lock, flags);
+
+		if (hrtimer_try_to_cancel(&vib->vib_timer) < 0) {
+			spin_unlock_irqrestore(&vib->lock, flags);
+			cpu_relax();
+			goto retry;
+		}
+		VIB_INFO_LOG(" pm8xxx_vib_enable, %s(parent:%s): vibrates %d msec\n",
+						current->comm, current->parent->comm, value);
+
+		if (value == 0)
+			vib->state = 0;
+		else {
+			value = (value > vib->pdata->max_timeout_ms ?
+					 vib->pdata->max_timeout_ms : value);
+			vib->state = 1;
+			hrtimer_start(&vib->vib_timer,
+				      ktime_set(value / 1000, (value % 1000) * 1000000),
+				      HRTIMER_MODE_REL);
+		}
 		spin_unlock_irqrestore(&vib->lock, flags);
-		cpu_relax();
-		goto retry;
+		schedule_work(&vib->work);
 	}
-	VIB_INFO_LOG(" pm8xxx_vib_enable, %s(parent:%s): vibrates %d msec\n",
-					current->comm, current->parent->comm, value);
-
-	if (value == 0)
-		vib->state = 0;
-	else {
-		value = (value > vib->pdata->max_timeout_ms ?
-				 vib->pdata->max_timeout_ms : value);
-		vib->state = 1;
-		hrtimer_start(&vib->vib_timer,
-			      ktime_set(value / 1000, (value % 1000) * 1000000),
-			      HRTIMER_MODE_REL);
-	}
-	spin_unlock_irqrestore(&vib->lock, flags);
-	schedule_work(&vib->work);
 }
 
 static void pm8xxx_vib_update(struct work_struct *work)
@@ -343,3 +350,4 @@ module_exit(pm8xxx_vib_exit);
 MODULE_ALIAS("platform:" PM8XXX_VIBRATOR_DEV_NAME);
 MODULE_DESCRIPTION("pm8xxx vibrator driver");
 MODULE_LICENSE("GPL v2");
+
