@@ -1048,6 +1048,11 @@ static irqreturn_t cy8c_ts_irq_thread(int irq, void *ptr)
 			exec_count = true;
 			barrier[0] = false;
 			barrier[1] = false;
+
+			if ((scr_suspended == true)) {
+				cy8c_reset_baseline();
+			}
+
 		}
 #endif
 	}
