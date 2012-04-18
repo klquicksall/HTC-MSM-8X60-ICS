@@ -1514,7 +1514,6 @@ static void pairing_complete_cb(struct hci_conn *conn, u8 status)
 	}
 
 	pairing_complete(cmd, status);
-	hci_conn_put(conn);
 }
 
 static void pairing_security_complete_cb(struct hci_conn *conn, u8 status)
@@ -1600,8 +1599,9 @@ static int pair_device(struct sock *sk, u16 index, unsigned char *data, u16 len)
 
 	hci_dev_lock_bh(hdev);
 
+	BT_DBG("SSP Cap is %d", cp->ssp_cap);
 	io_cap = cp->io_cap;
-	if (io_cap == 0x03) {
+	if ((cp->ssp_cap == 0) || (io_cap == 0x03)) {
 		sec_level = BT_SECURITY_MEDIUM;
 		auth_type = HCI_AT_DEDICATED_BONDING;
 	} else {
@@ -1619,7 +1619,6 @@ static int pair_device(struct sock *sk, u16 index, unsigned char *data, u16 len)
 			io_cap = 0x01;
 		conn = hci_connect(hdev, ACL_LINK, 0, &cp->bdaddr, sec_level,
 								auth_type);
-		conn->auth_initiator = 1;
 	}
 
 	if (IS_ERR(conn)) {
@@ -1792,81 +1791,6 @@ static int set_connection_params(struct sock *sk, u16 index,
 
 failed:
 	hci_dev_unlock_bh(hdev);
-	hci_dev_put(hdev);
-
-	return err;
-}
-
-static int set_rssi_reporter(struct sock *sk, u16 index,
-				unsigned char *data, u16 len)
-{
-	struct mgmt_cp_set_rssi_reporter *cp = (void *) data;
-	struct hci_dev *hdev;
-	struct hci_conn *conn;
-	int err = 0;
-
-	if (len != sizeof(*cp))
-		return cmd_status(sk, index, MGMT_OP_SET_RSSI_REPORTER,
-								EINVAL);
-
-	hdev = hci_dev_get(index);
-	if (!hdev)
-		return cmd_status(sk, index, MGMT_OP_SET_RSSI_REPORTER,
-							ENODEV);
-
-	hci_dev_lock(hdev);
-
-	conn = hci_conn_hash_lookup_ba(hdev, LE_LINK, &cp->bdaddr);
-
-	if (!conn) {
-		err = cmd_status(sk, index, MGMT_OP_SET_RSSI_REPORTER,
-						ENOTCONN);
-		goto failed;
-	}
-
-	BT_DBG("updateOnThreshExceed %d ", cp->updateOnThreshExceed);
-	hci_conn_set_rssi_reporter(conn, cp->rssi_threshold,
-			__le16_to_cpu(cp->interval), cp->updateOnThreshExceed);
-
-failed:
-	hci_dev_unlock(hdev);
-	hci_dev_put(hdev);
-
-	return err;
-}
-
-static int unset_rssi_reporter(struct sock *sk, u16 index,
-			unsigned char *data, u16 len)
-{
-	struct mgmt_cp_unset_rssi_reporter *cp = (void *) data;
-	struct hci_dev *hdev;
-	struct hci_conn *conn;
-	int err = 0;
-
-	if (len != sizeof(*cp))
-		return cmd_status(sk, index, MGMT_OP_UNSET_RSSI_REPORTER,
-					EINVAL);
-
-	hdev = hci_dev_get(index);
-
-	if (!hdev)
-		return cmd_status(sk, index, MGMT_OP_UNSET_RSSI_REPORTER,
-					ENODEV);
-
-	hci_dev_lock(hdev);
-
-	conn = hci_conn_hash_lookup_ba(hdev, LE_LINK, &cp->bdaddr);
-
-	if (!conn) {
-		err = cmd_status(sk, index, MGMT_OP_UNSET_RSSI_REPORTER,
-					ENOTCONN);
-		goto failed;
-	}
-
-	hci_conn_unset_rssi_reporter(conn);
-
-failed:
-	hci_dev_unlock(hdev);
 	hci_dev_put(hdev);
 
 	return err;
@@ -2423,12 +2347,6 @@ int mgmt_control(struct sock *sk, struct msghdr *msg, size_t msglen)
 	case MGMT_OP_SET_CONNECTION_PARAMS:
 		err = set_connection_params(sk, index, buf + sizeof(*hdr), len);
 		break;
-	case MGMT_OP_SET_RSSI_REPORTER:
-		err = set_rssi_reporter(sk, index, buf + sizeof(*hdr), len);
-		break;
-	case MGMT_OP_UNSET_RSSI_REPORTER:
-		err = unset_rssi_reporter(sk, index, buf + sizeof(*hdr), len);
-		break;
 	case MGMT_OP_READ_LOCAL_OOB_DATA:
 		err = read_local_oob_data(sk, index);
 		break;
@@ -2736,11 +2654,8 @@ int mgmt_user_confirm_request(u16 index, u8 event,
 	if ((conn->auth_type & HCI_AT_DEDICATED_BONDING) &&
 			conn->auth_initiator && rem_cap == 0x03)
 		ev.auto_confirm = 1;
-	else if (loc_cap == 0x01 && (rem_cap == 0x00 || rem_cap == 0x03)) {
-		if (!loc_mitm && !rem_mitm)
-			value = 0;
+	else if (loc_cap == 0x01 && (rem_cap == 0x00 || rem_cap == 0x03))
 		goto no_auto_confirm;
-	}
 
 
 	if ((!loc_mitm || rem_cap == 0x03) && (!rem_mitm || loc_cap == 0x03))
@@ -2881,57 +2796,6 @@ int mgmt_read_local_oob_data_reply_complete(u16 index, u8 *hash, u8 *randomizer,
 	return err;
 }
 
-void mgmt_read_rssi_complete(u16 index, s8 rssi, bdaddr_t *bdaddr,
-		u16 handle, u8 status)
-{
-	struct mgmt_ev_rssi_update ev;
-	struct hci_conn *conn;
-	struct hci_dev *hdev;
-
-	if (status)
-		return;
-
-	hdev = hci_dev_get(index);
-	conn = hci_conn_hash_lookup_handle(hdev, handle);
-
-	if (!conn)
-		return;
-
-	BT_DBG("rssi_update_thresh_exceed : %d ",
-		   conn->rssi_update_thresh_exceed);
-	BT_DBG("RSSI Threshold : %d , recvd RSSI : %d ",
-			conn->rssi_threshold, rssi);
-
-	if (conn->rssi_update_thresh_exceed == 1) {
-		BT_DBG("rssi_update_thresh_exceed == 1");
-		if (rssi > conn->rssi_threshold) {
-			memset(&ev, 0, sizeof(ev));
-			bacpy(&ev.bdaddr, bdaddr);
-			ev.rssi = rssi;
-			mgmt_event(MGMT_EV_RSSI_UPDATE, index, &ev,
-				sizeof(ev), NULL);
-		} else {
-			hci_conn_set_rssi_reporter(conn, conn->rssi_threshold,
-				conn->rssi_update_interval,
-				conn->rssi_update_thresh_exceed);
-		}
-	} else {
-		BT_DBG("rssi_update_thresh_exceed == 0");
-		if (rssi < conn->rssi_threshold) {
-			memset(&ev, 0, sizeof(ev));
-			bacpy(&ev.bdaddr, bdaddr);
-			ev.rssi = rssi;
-			mgmt_event(MGMT_EV_RSSI_UPDATE, index, &ev,
-				sizeof(ev), NULL);
-		} else {
-			hci_conn_set_rssi_reporter(conn, conn->rssi_threshold,
-				conn->rssi_update_interval,
-				conn->rssi_update_thresh_exceed);
-		}
-	}
-}
-
-
 int mgmt_device_found(u16 index, bdaddr_t *bdaddr, u8 type, u8 le,
 			u8 *dev_class, s8 rssi, u8 eir_len, u8 *eir)
 {
@@ -3031,32 +2895,4 @@ int mgmt_remote_class(u16 index, bdaddr_t *bdaddr, u8 dev_class[3])
 	memcpy(ev.dev_class, dev_class, 3);
 
 	return mgmt_event(MGMT_EV_REMOTE_CLASS, index, &ev, sizeof(ev), NULL);
-}
-
-int mgmt_remote_version(u16 index, bdaddr_t *bdaddr, u8 ver, u16 mnf,
-							u16 sub_ver)
-{
-	struct mgmt_ev_remote_version ev;
-
-	memset(&ev, 0, sizeof(ev));
-
-	bacpy(&ev.bdaddr, bdaddr);
-	ev.lmp_ver = ver;
-	ev.manufacturer = mnf;
-	ev.lmp_subver = sub_ver;
-
-	return mgmt_event(MGMT_EV_REMOTE_VERSION, index, &ev, sizeof(ev), NULL);
-}
-
-int mgmt_remote_features(u16 index, bdaddr_t *bdaddr, u8 features[8])
-{
-	struct mgmt_ev_remote_features ev;
-
-	memset(&ev, 0, sizeof(ev));
-
-	bacpy(&ev.bdaddr, bdaddr);
-	memcpy(ev.features, features, sizeof(ev.features));
-
-	return mgmt_event(MGMT_EV_REMOTE_FEATURES, index, &ev, sizeof(ev),
-									NULL);
 }
