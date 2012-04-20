@@ -384,7 +384,7 @@ validate_list(struct nouveau_channel *chan, struct list_head *list,
 	list_for_each_entry(nvbo, list, entry) {
 		struct drm_nouveau_gem_pushbuf_bo *b = &pbbo[nvbo->pbbo_index];
 
-		ret = validate_sync(chan, nvbo);
+		ret = nouveau_fence_sync(nvbo->bo.sync_obj, chan);
 		if (unlikely(ret)) {
 			NV_ERROR(dev, "fail pre-validate sync\n");
 			return ret;
@@ -407,7 +407,7 @@ validate_list(struct nouveau_channel *chan, struct list_head *list,
 			return ret;
 		}
 
-		ret = validate_sync(chan, nvbo);
+		ret = nouveau_fence_sync(nvbo->bo.sync_obj, chan);
 		if (unlikely(ret)) {
 			NV_ERROR(dev, "fail post-validate sync\n");
 			return ret;
