@@ -948,14 +948,14 @@ static irqreturn_t cy8c_ts_irq_thread(int irq, void *ptr)
 				}
 #ifdef CONFIG_TOUCHSCREEN_CYPRESS_SWEEP2WAKE
 				if ((ts->finger_count == 1) && (scr_suspended == true)) {
-					prevx = 240;
-					nextx = 580;
+					prevx = 30;
+					nextx = 300;
 					if ((barrier[0] == true) ||
 					   ((finger_data[loop_i][0] > prevx) &&
 					    (finger_data[loop_i][0] < nextx) &&
 					    (finger_data[loop_i][1] > 950))) {
-						prevx = 580;
-						nextx = 920;
+						prevx = 300;
+						nextx = 640;
 						barrier[0] = true;
 						if ((barrier[1] == true) ||
 						   ((finger_data[loop_i][0] > prevx) &&
