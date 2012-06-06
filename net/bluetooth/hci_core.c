@@ -152,7 +152,7 @@ static int __hci_request(struct hci_dev *hdev, void (*req)(struct hci_dev *hdev,
 
 	switch (hdev->req_status) {
 	case HCI_REQ_DONE:
-		err = -bt_err(hdev->req_result);
+		err = -bt_to_errno(hdev->req_result);
 		break;
 
 	case HCI_REQ_CANCELED:
@@ -566,6 +566,19 @@ int hci_dev_open(__u16 dev)
 		goto done;
 	}
 
+	if (!skb_queue_empty(&hdev->cmd_q)) {
+		BT_ERR("command queue is not empty, purging");
+		skb_queue_purge(&hdev->cmd_q);
+	}
+	if (!skb_queue_empty(&hdev->rx_q)) {
+		BT_ERR("rx queue is not empty, purging");
+		skb_queue_purge(&hdev->rx_q);
+	}
+	if (!skb_queue_empty(&hdev->raw_q)) {
+		BT_ERR("raw queue is not empty, purging");
+		skb_queue_purge(&hdev->raw_q);
+	}
+
 	if (!test_bit(HCI_RAW, &hdev->flags)) {
 		atomic_set(&hdev->cmd_cnt, 1);
 		set_bit(HCI_INIT, &hdev->flags);
@@ -618,7 +631,7 @@ done:
 	return ret;
 }
 
-static int hci_dev_do_close(struct hci_dev *hdev)
+static int hci_dev_do_close(struct hci_dev *hdev, u8 is_process)
 {
 	unsigned long keepflags = 0;
 
@@ -639,7 +652,7 @@ static int hci_dev_do_close(struct hci_dev *hdev)
 
 	hci_dev_lock_bh(hdev);
 	inquiry_cache_flush(hdev);
-	hci_conn_hash_flush(hdev);
+	hci_conn_hash_flush(hdev, is_process);
 	hci_dev_unlock_bh(hdev);
 
 	hci_notify(hdev, HCI_DEV_DOWN);
@@ -706,7 +719,7 @@ int hci_dev_close(__u16 dev)
 	hdev = hci_dev_get(dev);
 	if (!hdev)
 		return -ENODEV;
-	err = hci_dev_do_close(hdev);
+	err = hci_dev_do_close(hdev, 1);
 	hci_dev_put(hdev);
 	return err;
 }
@@ -732,7 +745,7 @@ int hci_dev_reset(__u16 dev)
 
 	hci_dev_lock_bh(hdev);
 	inquiry_cache_flush(hdev);
-	hci_conn_hash_flush(hdev);
+	hci_conn_hash_flush(hdev, 0);
 	hci_dev_unlock_bh(hdev);
 
 	if (hdev->flush)
@@ -945,7 +958,7 @@ static int hci_rfkill_set_block(void *data, bool blocked)
 	if (!blocked)
 		return 0;
 
-	hci_dev_do_close(hdev);
+	hci_dev_do_close(hdev, 0);
 
 	return 0;
 }
@@ -1557,7 +1570,7 @@ int hci_unregister_dev(struct hci_dev *hdev)
 	list_del(&hdev->list);
 	write_unlock_bh(&hci_dev_list_lock);
 
-	hci_dev_do_close(hdev);
+	hci_dev_do_close(hdev, hdev->bus == HCI_SMD);
 
 	for (i = 0; i < NUM_REASSEMBLY; i++)
 		kfree_skb(hdev->reassembly[i]);
@@ -2506,3 +2519,4 @@ static void hci_cmd_task(unsigned long arg)
 
 module_param(enable_smp, bool, 0644);
 MODULE_PARM_DESC(enable_smp, "Enable SMP support (LE only)");
+
