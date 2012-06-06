@@ -1325,4 +1325,3 @@ void l2cap_cleanup_sockets(void)
 
 	proto_unregister(&l2cap_proto);
 }
-

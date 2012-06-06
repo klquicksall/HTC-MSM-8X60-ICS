@@ -2519,4 +2519,3 @@ static void hci_cmd_task(unsigned long arg)
 
 module_param(enable_smp, bool, 0644);
 MODULE_PARM_DESC(enable_smp, "Enable SMP support (LE only)");
-

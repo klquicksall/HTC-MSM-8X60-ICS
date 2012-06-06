@@ -890,4 +890,3 @@ void hci_sock_cleanup(void)
 
 module_param(enable_mgmt, bool, 0644);
 MODULE_PARM_DESC(enable_mgmt, "Enable Management interface");
-

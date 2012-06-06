@@ -1072,4 +1072,3 @@ void smp_timeout(unsigned long arg)
 	mgmt_auth_failed(conn->hcon->hdev->id, conn->dst, SMP_UNSPECIFIED);
 	hci_conn_put(conn->hcon);
 }
-

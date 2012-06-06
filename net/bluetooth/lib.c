@@ -150,4 +150,3 @@ int bt_to_errno(__u16 code)
 	}
 }
 EXPORT_SYMBOL(bt_to_errno);
-

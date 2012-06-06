@@ -1842,11 +1842,29 @@ static inline void hci_auth_complete_evt(struct hci_dev *hdev, struct sk_buff *s
 
 		if (test_bit(HCI_CONN_ENCRYPT_PEND, &conn->pend)) {
 			if (!ev->status) {
-				struct hci_cp_set_conn_encrypt cp;
-				cp.handle  = ev->handle;
-				cp.encrypt = 0x01;
-				hci_send_cmd(hdev, HCI_OP_SET_CONN_ENCRYPT,
-							sizeof(cp), &cp);
+				if (conn->link_mode & HCI_LM_ENCRYPT) {
+					/* Encryption implies authentication */
+					conn->link_mode |= HCI_LM_AUTH;
+					conn->link_mode |= HCI_LM_ENCRYPT;
+					conn->sec_level =
+						conn->pending_sec_level;
+					clear_bit(HCI_CONN_ENCRYPT_PEND,
+							&conn->pend);
+					hci_encrypt_cfm(conn, ev->status, 1);
+
+					if (test_bit(HCI_MGMT, &hdev->flags))
+						mgmt_encrypt_change(hdev->id,
+							&conn->dst,
+							ev->status);
+
+				} else {
+					struct hci_cp_set_conn_encrypt cp;
+					cp.handle  = ev->handle;
+					cp.encrypt = 0x01;
+					hci_send_cmd(hdev,
+						HCI_OP_SET_CONN_ENCRYPT,
+						sizeof(cp), &cp);
+				}
 			} else {
 				clear_bit(HCI_CONN_ENCRYPT_PEND, &conn->pend);
 				hci_encrypt_cfm(conn, ev->status, 0x00);
@@ -1910,8 +1928,25 @@ static inline void hci_encrypt_change_evt(struct hci_dev *hdev, struct sk_buff *
 
 			hci_proto_connect_cfm(conn, ev->status);
 			hci_conn_put(conn);
-		} else
-			hci_encrypt_cfm(conn, ev->status, ev->encrypt);
+		} else {
+			/*
+			* If the remote device does not support
+			* Pause Encryption, usually during the
+			* roleSwitch we see Encryption disable
+			* for short duration. Allow remote device
+			* to disable encryption
+			* for short duration in this case.
+			*/
+			if ((ev->encrypt == 0) && (ev->status == 0) &&
+				((conn->features[5] & LMP_PAUSE_ENC) == 0)) {
+				mod_timer(&conn->encrypt_pause_timer,
+					jiffies + msecs_to_jiffies(500));
+				BT_INFO("enc pause timer, enc_pend_flag set");
+			} else {
+				del_timer(&conn->encrypt_pause_timer);
+				hci_encrypt_cfm(conn, ev->status, ev->encrypt);
+			}
+		}
 
 		if (test_bit(HCI_MGMT, &hdev->flags))
 			mgmt_encrypt_change(hdev->id, &conn->dst, ev->status);
@@ -2626,6 +2661,7 @@ static inline void hci_link_key_notify_evt(struct hci_dev *hdev, struct sk_buff 
 		conn->key_type = ev->key_type;
 		hci_disconnect_amp(conn, 0x06);
 
+		conn->link_mode &= ~HCI_LM_ENCRYPT;
 		pin_len = conn->pin_length;
 		hci_conn_put(conn);
 		hci_conn_enter_active_mode(conn, 0);
@@ -3562,4 +3598,3 @@ void hci_si_event(struct hci_dev *hdev, int type, int dlen, void *data)
 	hci_send_to_sock(hdev, skb, NULL);
 	kfree_skb(skb);
 }
-
